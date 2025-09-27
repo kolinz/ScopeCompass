@@ -139,7 +139,7 @@ button_layout = widgets.Layout(width='160px')
 update_button = widgets.Button(description="グラフを更新", button_style='primary', layout=button_layout)
 export_csv_button = widgets.Button(description="CSVダウンロード準備", button_style='success', layout=button_layout)
 gsheet_name_input = widgets.Text(value='責任共有モデル', description='ファイル名の接頭辞:', style={'description_width': 'initial'})
-export_gsheet_button = widgets.Button(description="GSheets 連携", button_style='warning', layout=button_layout)
+export_gsheet_button = widgets.Button(description="Google Drive連携", button_style='warning', layout=button_layout)
 status_display = widgets.HTML("")
 download_link_display = widgets.HTML(value="")
 input_widgets = {}
