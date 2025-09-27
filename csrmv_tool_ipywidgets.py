@@ -221,12 +221,5 @@ app_layout = widgets.HBox([control_panel, chart_panel])
 # ==============================================================================
 display(app_layout)
 on_update_button_clicked(None)
-try:
-    # Google Colab環境の場合
-    from google.colab import output
-    output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
-except ImportError:
-    # Google Colab以外のJupyter環境の場合
-    # 少し待ってからスクロールしないと、要素が描画される前に実行されてしまうことがある
-    js_code = "setTimeout(() => { window.scrollTo(0, document.body.scrollHeight); }, 200);"
-    display(Javascript(js_code))
+js_code = "setTimeout(() => { window.scrollTo(0, document.body.scrollHeight); }, 200);"
+display(Javascript(js_code))
