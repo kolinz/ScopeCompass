@@ -2,14 +2,14 @@
 """
 このツールは、クラウドサービスの責任共有モデル可視化（CSRMV）ツールです。
 CSRMVは、Cloud Services Shared Responsibility Model Visualization の略称です。
-Google ColabなどのJupyter Notebook / Lab環境にこのコードを貼り付けて動かすことが最も手軽です。
+Google Colab（Google Colaboratory）に、このコードを貼り付け、セルを実行してください。
 CSVダウンロードを使う場合は、「グラフを更新」を押してからにしてください。
 ライブラリ関連エラーは、カーネルの再起動で解決することがあります。
 """
 # ==============================================================================
 # 1. ライブラリのインストールとインポート
 # ==============================================================================
-!pip install --upgrade -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
+!pip install -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output, Javascript
