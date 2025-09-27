@@ -2,7 +2,6 @@
 """
 このツールは、クラウドサービスの責任共有モデル可視化（CSRMV）ツールです。
 CSRMVは、Cloud Services Shared Responsibility Model Visualization の略称です。
-すべてのセルを実行してください。最後のセルにツールが表示されます。
 Google ColabなどのJupyter Notebook / Lab環境にこのコードを貼り付けて動かすことが最も手軽です。
 CSVダウンロードを使う場合は、「グラフ更新」を押してからにしてください。
 """
