@@ -4,14 +4,16 @@
 CSRMVは、Cloud Services Shared Responsibility Model Visualization の略称です。
 Google ColabなどのJupyter Notebook / Lab環境にこのコードを貼り付けて動かすことが最も手軽です。
 CSVダウンロードを使う場合は、「グラフを更新」を押してからにしてください。
+ライブラリ関連エラーは、カーネルの再起動で解決することがあります。
 """
 # ==============================================================================
 # 1. ライブラリのインストールとインポート
 # ==============================================================================
-!pip install -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
+!pip uninstall -y gradio
+!pip install --upgrade -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
 
 import ipywidgets as widgets
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, Javascript
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import japanize_matplotlib
@@ -22,7 +24,6 @@ import pandas as pd
 import base64
 from urllib.parse import quote
 import textwrap
-from google.colab import output
 
 # ==============================================================================
 # 2. 定数と初期値の定義
@@ -220,4 +221,12 @@ app_layout = widgets.HBox([control_panel, chart_panel])
 # ==============================================================================
 display(app_layout)
 on_update_button_clicked(None)
-output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
+try:
+    # Google Colab環境の場合
+    from google.colab import output
+    output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
+except ImportError:
+    # Google Colab以外のJupyter環境の場合
+    # 少し待ってからスクロールしないと、要素が描画される前に実行されてしまうことがある
+    js_code = "setTimeout(() => { window.scrollTo(0, document.body.scrollHeight); }, 200);"
+    display(Javascript(js_code))
