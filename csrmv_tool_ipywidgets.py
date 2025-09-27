@@ -1,20 +1,30 @@
 # -*- coding: utf-8 -*-
 """
 このツールは、クラウドサービスの責任共有モデル可視化（CSRMV）ツールです。
+CSRMVは、Cloud Services Shared Responsibility Model Visualization の略称です。
 すべてのセルを実行してください。最後のセルにツールが表示されます。
-Google ColabなどのJupyter Lab環境にこのコードを貼り付けて動かすことが最も手軽です。
+Google ColabなどのJupyter Notebook / Lab環境にこのコードを貼り付けて動かすことが最も手軽です。
+CSVダウンロードを使う場合は、「グラフ更新」を押してからにしてください。
 """
+# ==============================================================================
+# ライブラリのインストール
+# ==============================================================================
+!!pip install -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
 
-!pip install -q matplotlib japanize-matplotlib numpy pillow
-
+# ==============================================================================
+# ライブラリのインポート
+# ==============================================================================
 import ipywidgets as widgets
-from IPython.display import display, clear_output
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import japanize_matplotlib
 import numpy as np
 import io
+import pandas as pd
+import base64
+from IPython.display import display, clear_output
 from PIL import Image
+from urllib.parse import quote
 from google.colab import output
 
 # ==============================================================================
@@ -44,18 +54,15 @@ INITIAL_VALUES = {
 # コアロジック関数
 # ==============================================================================
 def draw_chart_for_ipywidgets(sier_values, user_values, csp_values, active_models):
-    """
-    ipywidgetsのOutputウィジェットにグラフを描画する。
-    """
     num_layers, num_active_models = sier_values.shape
     fig_width = max(10, num_active_models * 2.5)
-    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=100) # dpiを調整
+    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=100)
 
     for i in range(num_layers):
         for j in range(num_active_models):
             total = sier_values[i, j] + user_values[i, j] + csp_values[i, j]
             if total == 0: continue
-
+            
             percentages_dict = {"End User": user_values[i, j] / total, "SIer": sier_values[i, j] / total, "CSP": csp_values[i, j] / total}
             stack_order = ["End User", "SIer", "CSP"]
             current_y = i
@@ -77,17 +84,34 @@ def draw_chart_for_ipywidgets(sier_values, user_values, csp_values, active_model
     legend_labels_ordered = {"End User": "End User", "SIer": "SIer", "CSP": "CSP (クラウド事業者)"}
     legend_elements = [patches.Patch(facecolor=PARTIES[name], label=label) for name, label in legend_labels_ordered.items()]
     ax.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.01), ncol=3, frameon=False, fontsize=12)
-
+    
     plt.tight_layout(pad=1.0)
-    plt.show() # figを直接表示する
+    plt.show()
+
+# 選択されたモデルのリストを引数で受け取る
+def create_download_link(input_widgets, selected_models):
+    """選択されたモデルの入力値からCSVを生成し、ダウンロードリンクのHTMLを返す"""
+    data = []
+    # 全モデル(MODELS)ではなく、選択されたモデル(selected_models)でループ
+    for model in selected_models:
+        for layer in LAYERS:
+            u_val = input_widgets[model][layer]['End User'].value
+            s_val = input_widgets[model][layer]['SIer'].value
+            c_val = input_widgets[model][layer]['CSP'].value
+            data.append([model, layer, u_val, s_val, c_val])
+    
+    df = pd.DataFrame(data, columns=['サービスモデル', '責任範囲', 'End User', 'SIer', 'CSP'])
+    
+    csv_str = df.to_csv(index=False, encoding='utf-8-sig')
+    b64 = base64.b64encode(csv_str.encode()).decode()
+    href = f'<a href="data:text/csv;base64,{b64}" download="responsibility_model.csv">現在の選択範囲をCSVでダウンロード</a>'
+    return href
 
 # ==============================================================================
 # ipywidgets UIの構築とイベント処理
 # ==============================================================================
 
 # --- UIウィジェットの作成 ---
-
-# 操作パネル
 title = widgets.HTML("<h2>クラウド責任共有モデル 可視化ツール</h2>")
 description = widgets.HTML("<p>表示するモデルを選択し、各タブで数値を入力後、「グラフを更新」ボタンを押してください。</p>")
 model_selector = widgets.SelectMultiple(
@@ -99,31 +123,22 @@ model_selector = widgets.SelectMultiple(
 )
 update_button = widgets.Button(description="グラフを更新", button_style='primary')
 status_display = widgets.HTML("")
+download_link_display = widgets.HTML(value="")
 
-# データ入力タブ
 tab_children = []
-# 入力ウィジェットを後から参照するために辞書に格納
 input_widgets = {}
-
 for model in MODELS:
     layer_inputs = []
     input_widgets[model] = {}
     for layer in LAYERS:
         layer_index = LAYERS.index(layer)
         s_val, u_val, c_val = INITIAL_VALUES[model][layer_index]
-
-        # UIの表示順序に合わせてウィジェットを作成
         u_input = widgets.IntText(value=u_val, description="End User %", style={'description_width': 'initial'})
         s_input = widgets.IntText(value=s_val, description="SIer %", style={'description_width': 'initial'})
         c_input = widgets.IntText(value=c_val, description="CSP %", style={'description_width': 'initial'})
-
-        # 辞書には役割ごとに格納
         input_widgets[model][layer] = {'End User': u_input, 'SIer': s_input, 'CSP': c_input}
-
-        # 各レイヤーのウィジェットをVBoxにまとめる
         layer_group = widgets.VBox([widgets.HTML(f"<b>{layer}</b>"), u_input, s_input, c_input])
         layer_inputs.append(layer_group)
-
     tab_children.append(widgets.VBox(layer_inputs))
 
 input_tabs = widgets.Tab()
@@ -131,23 +146,19 @@ input_tabs.children = tab_children
 for i, model in enumerate(MODELS):
     input_tabs.set_title(i, model)
 
-# グラフ描画エリア
 chart_output = widgets.Output()
 
 # --- イベントハンドラ関数の定義 ---
-
 def on_update_button_clicked(b):
-    # 描画エリアをクリア
     chart_output.clear_output(wait=True)
-
-    # 選択されたモデルを取得し、定義順にソート
+    
     selected_models = list(model_selector.value)
     if not selected_models:
         status_display.value = "<p style='color:red;'>❌ エラー: 表示するサービスモデルを1つ以上選択してください。</p>"
+        download_link_display.value = "" # エラー時はリンクを消去
         return
     selected_models.sort(key=MODELS.index)
 
-    # 全ての選択されたモデル・レイヤーで合計が100か検証
     for model in selected_models:
         for layer in LAYERS:
             u_val = input_widgets[model][layer]['End User'].value
@@ -156,44 +167,40 @@ def on_update_button_clicked(b):
             total = u_val + s_val + c_val
             if total != 100:
                 status_display.value = f"<p style='color:red;'>❌ エラー: 「{model}」の「{layer}」の合計が {total} です。100に修正してください。</p>"
+                download_link_display.value = "" # エラー時はリンクを消去
                 return
-
-    # 描画用にデータをフィルタリング＆準備
+    
     selected_indices = [MODELS.index(model) for model in selected_models]
     num_layers = len(LAYERS)
-
     sier_to_draw = np.zeros((num_layers, len(selected_models)), dtype=int)
     user_to_draw = np.zeros((num_layers, len(selected_models)), dtype=int)
     csp_to_draw = np.zeros((num_layers, len(selected_models)), dtype=int)
-
     for col_idx, model in enumerate(selected_models):
         for row_idx, layer in enumerate(LAYERS):
             user_to_draw[row_idx, col_idx] = input_widgets[model][layer]['End User'].value
             sier_to_draw[row_idx, col_idx] = input_widgets[model][layer]['SIer'].value
             csp_to_draw[row_idx, col_idx] = input_widgets[model][layer]['CSP'].value
 
-    # グラフ描画
     with chart_output:
         draw_chart_for_ipywidgets(sier_to_draw, user_to_draw, csp_to_draw, selected_models)
-
+    
     status_display.value = f"<p style='color:green;'>✅ グラフを正常に更新しました。（{', '.join(selected_models)}）</p>"
-
+    download_link_display.value = create_download_link(input_widgets, selected_models)
 
 # --- イベントの接続 ---
 update_button.on_click(on_update_button_clicked)
 
-# --- UI全体のレイアウトと表示 ---
+# --- UI全体のレイアウト ---
 control_panel = widgets.VBox([
-    title,
+    title, 
     description,
     model_selector,
     update_button,
     status_display,
+    download_link_display, 
     widgets.HTML("<h3>調整パネル</h3>"),
     input_tabs
 ])
-
-# HBoxで操作パネルと描画エリアを横並びに
 app_layout = widgets.HBox([
     control_panel,
     widgets.VBox([widgets.HTML("<h3>責任分担図</h3>"), chart_output])
