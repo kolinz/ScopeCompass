@@ -8,7 +8,7 @@ CSVダウンロードを使う場合は、「グラフを更新」を押して�
 # ==============================================================================
 # 1. ライブラリのインストールとインポート
 # ==============================================================================
-!pip install -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow
+!pip install -q ipywidgets matplotlib japanize-matplotlib numpy pandas pillow gspread gspread-dataframe google-auth-oauthlib google-api-python-client
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output, Javascript
@@ -22,7 +22,13 @@ import pandas as pd
 import base64
 from urllib.parse import quote
 import textwrap
-from google.colab import output
+import datetime
+import gspread
+from google.auth import default
+from gspread_dataframe import set_with_dataframe
+from google.colab import auth
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # ==============================================================================
 # 2. 定数と初期値の定義
@@ -84,8 +90,8 @@ def create_chart_figure(sier_values, user_values, csp_values, active_models, org
     
     return fig
 
-def create_download_link(input_widgets, selected_models):
-    """選択されたモデルの入力値からCSVを生成し、ダウンロードリンクのHTMLを返す"""
+def get_dataframe_from_inputs(input_widgets, selected_models):
+    """現在の入力値からpandas DataFrameを生成する"""
     data = []
     for model in selected_models:
         for layer in LAYERS:
@@ -94,11 +100,26 @@ def create_download_link(input_widgets, selected_models):
             c_val = input_widgets[model][layer]['CSP'].value
             note = input_widgets[model][layer]['Note'].value
             data.append([model, layer, u_val, s_val, c_val, note])
-    df = pd.DataFrame(data, columns=['サービスモデル', 'ITレイヤー', 'End User', 'SIer', 'CSP', '注釈'])
-    csv_str = df.to_csv(index=False, encoding='utf-8-sig')
-    b64 = base64.b64encode(csv_str.encode()).decode()
-    href = f'<a href="data:text/csv;base64,{b64}" download="responsibility_model.csv">CSVファイルをダウンロード</a>'
-    return href
+    return pd.DataFrame(data, columns=['サービスモデル', 'ITレイヤー', 'End User', 'SIer', 'CSP', '注釈'])
+
+def validate_and_get_data(selected_models, input_widgets):
+    """入力値を検証し、問題があればエラーメッセージを、なければ描画用データを返す"""
+    if not selected_models:
+        return None, "❌ エラー: 表示するサービスモデルを1つ以上選択してください。"
+    for model in selected_models:
+        for layer in LAYERS:
+            total = sum([input_widgets[model][layer][p].value for p in ['End User', 'SIer', 'CSP']])
+            if total != 100:
+                return None, f"❌ エラー: 「{model}」の「{layer}」の合計が {total} です。100に修正してください。"
+    
+    num_layers = len(LAYERS)
+    sier, user, csp = [np.zeros((num_layers, len(selected_models)), dtype=int) for _ in range(3)]
+    for col_idx, model in enumerate(selected_models):
+        for row_idx, layer in enumerate(LAYERS):
+            user[row_idx, col_idx] = input_widgets[model][layer]['End User'].value
+            sier[row_idx, col_idx] = input_widgets[model][layer]['SIer'].value
+            csp[row_idx, col_idx] = input_widgets[model][layer]['CSP'].value
+    return (sier, user, csp), None
 
 # ==============================================================================
 # 4. ipywidgets UIの構築とイベント処理
@@ -106,7 +127,7 @@ def create_download_link(input_widgets, selected_models):
 
 # --- 4.1 UIウィジェットの作成 ---
 title = widgets.HTML("<h2>クラウド責任共有モデル 可視化ツール</h2>")
-description = widgets.HTML("<p>役割別の組織名や表示モデルを選択し、各タブで数値を入力後、「グラフを更新」ボタンを押してください。</p>")
+description = widgets.HTML("<p>役割別の組織名や表示モデルを選択し、各タブで数値を入力後、各ボタンを押してください。</p>")
 org_names_inputs = {
     'End User': widgets.Textarea(value='顧客企業名', description='End User:', style={'description_width': 'initial'}, layout=widgets.Layout(height='auto')),
     'SIer': widgets.Textarea(value='SIer企業名', description='SIer:', style={'description_width': 'initial'}, layout=widgets.Layout(height='auto')),
@@ -117,9 +138,10 @@ model_selector = widgets.SelectMultiple(options=MODELS, value=MODELS, descriptio
 button_layout = widgets.Layout(width='160px')
 update_button = widgets.Button(description="グラフを更新", button_style='primary', layout=button_layout)
 export_csv_button = widgets.Button(description="CSVダウンロード準備", button_style='success', layout=button_layout)
+gsheet_name_input = widgets.Text(value='責任共有モデル', description='ファイル名の接頭辞:', style={'description_width': 'initial'})
+export_gsheet_button = widgets.Button(description="GSheets 連携", button_style='warning', layout=button_layout)
 status_display = widgets.HTML("")
 download_link_display = widgets.HTML(value="")
-
 input_widgets = {}
 tab_children = []
 for model in MODELS:
@@ -140,27 +162,6 @@ for i, model in enumerate(MODELS): input_tabs.set_title(i, model)
 chart_output = widgets.Output()
 
 # --- 4.2 イベントハンドラ関数の定義 ---
-def validate_and_get_data(selected_models, input_widgets):
-    """入力値を検証し、問題があればエラーメッセージを、なければ描画用データを返す"""
-    error = None
-    if not selected_models:
-        error = "❌ エラー: 表示するサービスモデルを1つ以上選択してください。"
-        return None, error
-    for model in selected_models:
-        for layer in LAYERS:
-            total = sum([input_widgets[model][layer][p].value for p in ['End User', 'SIer', 'CSP']])
-            if total != 100:
-                error = f"❌ エラー: 「{model}」の「{layer}」の合計が {total} です。100に修正してください。"
-                return None, error
-    num_layers = len(LAYERS)
-    sier, user, csp = [np.zeros((num_layers, len(selected_models)), dtype=int) for _ in range(3)]
-    for col_idx, model in enumerate(selected_models):
-        for row_idx, layer in enumerate(LAYERS):
-            user[row_idx, col_idx] = input_widgets[model][layer]['End User'].value
-            sier[row_idx, col_idx] = input_widgets[model][layer]['SIer'].value
-            csp[row_idx, col_idx] = input_widgets[model][layer]['CSP'].value
-    return (sier, user, csp), None
-
 def on_update_button_clicked(b):
     """「グラフを更新」ボタンが押された時の処理"""
     chart_output.clear_output(wait=True)
@@ -186,33 +187,113 @@ def on_export_csv_button_clicked(b):
     if not selected_models:
         status_display.value = "<p style='color:red;'>❌ エラー: 表示するサービスモデルを1つ以上選択してください。</p>"
         return
-    href = create_download_link(input_widgets, selected_models)
+    
+    df = get_dataframe_from_inputs(input_widgets, selected_models)
+    csv_str = df.to_csv(index=False, encoding='utf-8-sig')
+    b64 = base64.b64encode(csv_str.encode()).decode()
+    href = f'<a href="data:text/csv;base64,{b64}" download="responsibility_model.csv">CSVファイルをダウンロード</a>'
     download_link_display.value = href
     status_display.value = "<p style='color:blue;'>📄 下記リンクからCSVをダウンロードしてください。</p>"
+
+def on_export_to_gsheet_clicked(b):
+    """「GSheets 連携」ボタンが押された時の処理"""
+    status_display.value = "<p style='color:orange;'>⏳ Googleに認証し、スプレッドシートに書き込んでいます...</p>"
+    download_link_display.value = ""
+    
+    selected_models = list(model_selector.value)
+    selected_models.sort(key=MODELS.index)
+    data, error = validate_and_get_data(selected_models, input_widgets)
+    if error:
+        status_display.value = f"<p style='color:red;'>{error}</p>"
+        return
+        
+    try:
+        # Google認証
+        auth.authenticate_user()
+        creds, _ = default()
+        gc = gspread.authorize(creds)
+        drive_service = build('drive', 'v3', credentials=creds)
+        
+        # データ準備
+        df_to_export = get_dataframe_from_inputs(input_widgets, selected_models)
+        org_names = {role: widget.value for role, widget in org_names_inputs.items()}
+        sier_data, user_data, csp_data = data
+        fig_for_export = create_chart_figure(sier_data, user_data, csp_data, selected_models, org_names)
+        
+        # フォルダとファイルの名前をタイムスタンプ付きで生成
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = gsheet_name_input.value
+        if not base_name:
+            status_display.value = f"<p style='color:red;'>❌ エラー: ファイル名の接頭辞を入力してください。</p>"
+            return
+            
+        folder_name = f"{base_name}_{timestamp}"
+        sheet_name_with_ts = f"{base_name}_data_{timestamp}"
+        image_name_with_ts = f"{base_name}_chart_{timestamp}.png"
+
+        # Driveにフォルダを作成
+        folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
+        folder = drive_service.files().create(body=folder_metadata, fields='id, webViewLink').execute()
+        folder_id = folder.get('id')
+        folder_link = folder.get('webViewLink')
+
+        # スプレッドシートを作成し、フォルダに移動
+        sh = gc.create(sheet_name_with_ts)
+        drive_service.files().update(fileId=sh.id, addParents=folder_id, removeParents='root').execute()
+        sh.share(None, perm_type='anyone', role='reader')
+
+        # Sheet1にデータを書き込み
+        worksheet1 = sh.get_worksheet(0) or sh.add_worksheet(title="データ", rows="100", cols="20")
+        worksheet1.clear()
+        set_with_dataframe(worksheet1, df_to_export)
+        
+        # グラフ画像をPNGとしてメモリに保存し、Driveのフォルダにアップロード
+        buf = io.BytesIO()
+        fig_for_export.savefig(buf, format='png', bbox_inches='tight')
+        plt.close(fig_for_export)
+        buf.seek(0)
+        
+        file_metadata = {'name': image_name_with_ts, 'mimeType': 'image/png', 'parents': [folder_id]}
+        media = MediaIoBaseUpload(buf, mimetype='image/png')
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
+        drive_service.permissions().create(fileId=file.get('id'), body={'type': 'anyone', 'role': 'reader'}).execute()
+        
+        # Sheet2にグラフ画像を=IMAGE()関数で挿入
+        try:
+            worksheet2 = sh.worksheet("グラフ")
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet2 = sh.add_worksheet(title="グラフ", rows="50", cols="20")
+        worksheet2.clear()
+        image_url = file.get('webContentLink')
+        worksheet2.update('A1', [[f'=IMAGE("{image_url}")']])
+        
+        status_display.value = f"<p style='color:green;'>✅ <a href='{folder_link}' target='_blank'>フォルダ「{folder_name}」への出力が完了しました。</a></p>"
+
+    except Exception as e:
+        status_display.value = f"<p style='color:red;'>❌ エラーが発生しました: {e}</p>"
 
 # --- 4.3 イベントの接続 ---
 update_button.on_click(on_update_button_clicked)
 export_csv_button.on_click(on_export_csv_button_clicked)
+export_gsheet_button.on_click(on_export_to_gsheet_clicked)
 
 # --- 4.4 UI全体のレイアウト ---
-# 左側の操作パネル
 control_panel = widgets.VBox([
     title,
     description,
     model_selector,
-    widgets.HBox([update_button, export_csv_button]),
+    widgets.HBox([update_button, export_csv_button, export_gsheet_button]),
+    gsheet_name_input,
     status_display,
     download_link_display,
     org_box,
     widgets.HTML("<h3>調整パネル</h3>"),
     input_tabs
 ])
-# 右側の描画エリア
 chart_panel = widgets.VBox([
     widgets.HTML("<h3>責任分担図</h3>"),
     chart_output,
 ])
-# 全体をHBoxで横に並べる
 app_layout = widgets.HBox([control_panel, chart_panel])
 
 # ==============================================================================
@@ -220,4 +301,8 @@ app_layout = widgets.HBox([control_panel, chart_panel])
 # ==============================================================================
 display(app_layout)
 on_update_button_clicked(None)
-output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
+try:
+    from google.colab import output
+    output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
+except ImportError:
+    pass # Colab以外の環境では何もしない
