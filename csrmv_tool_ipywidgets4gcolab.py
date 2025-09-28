@@ -138,7 +138,7 @@ model_selector = widgets.SelectMultiple(options=MODELS, value=MODELS, descriptio
 button_layout = widgets.Layout(width='160px')
 update_button = widgets.Button(description="グラフを更新", button_style='primary', layout=button_layout)
 export_csv_button = widgets.Button(description="CSVダウンロード準備", button_style='success', layout=button_layout)
-gsheet_name_input = widgets.Text(value='責任共有モデル', description='ファイル名の接頭辞:', style={'description_width': 'initial'})
+gsheet_name_input = widgets.Text(value='クラウド責任共有モデル', description='ファイル名の接頭辞:', style={'description_width': 'initial'})
 export_gsheet_button = widgets.Button(description="Google Drive連携", button_style='warning', layout=button_layout)
 status_display = widgets.HTML("")
 download_link_display = widgets.HTML(value="")
@@ -181,23 +181,33 @@ def on_update_button_clicked(b):
     status_display.value = f"<p style='color:green;'>✅ グラフを正常に更新しました。（{', '.join(selected_models)}）</p>"
 
 def on_export_csv_button_clicked(b):
-    """「CSVダウンロード準備」ボタンが押された時の処理"""
     download_link_display.value = ""
     selected_models = list(model_selector.value)
     if not selected_models:
         status_display.value = "<p style='color:red;'>❌ エラー: 表示するサービスモデルを1つ以上選択してください。</p>"
         return
     
+    # ファイル名接頭辞とタイムスタンプを取得
+    base_name = gsheet_name_input.value
+    if not base_name:
+        status_display.value = f"<p style='color:red;'>❌ エラー: ファイル名の接頭辞を入力してください。</p>"
+        return
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"{base_name}_{timestamp}.csv"
+    
+    # CSVデータを生成
     df = get_dataframe_from_inputs(input_widgets, selected_models)
     csv_str = df.to_csv(index=False, encoding='utf-8-sig')
     b64 = base64.b64encode(csv_str.encode()).decode()
-    href = f'<a href="data:text/csv;base64,{b64}" download="responsibility_model.csv">CSVファイルをダウンロード</a>'
+    
+    # ダウンロードリンクを作成
+    href = f'<a href="data:text/csv;base64,{b64}" download="{file_name}">「{file_name}」をダウンロード</a>'
     download_link_display.value = href
     status_display.value = "<p style='color:blue;'>📄 下記リンクからCSVをダウンロードしてください。</p>"
 
 def on_export_to_gsheet_clicked(b):
-    """「GSheets 連携」ボタンが押された時の処理"""
-    status_display.value = "<p style='color:orange;'>⏳ Googleに認証し、スプレッドシートに書き込んでいます...</p>"
+    """「Google ドライブ連携」ボタンが押された時の処理"""
+    status_display.value = "<p style='color:orange;'>⏳ Googleに認証し、Google Driveに書き込んでいます...</p>"
     download_link_display.value = ""
     
     selected_models = list(model_selector.value)
@@ -231,13 +241,13 @@ def on_export_to_gsheet_clicked(b):
         sheet_name_with_ts = f"{base_name}_data_{timestamp}"
         image_name_with_ts = f"{base_name}_chart_{timestamp}.png"
 
-        # Driveにフォルダを作成
+        # Google Driveにフォルダを作成
         folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
         folder = drive_service.files().create(body=folder_metadata, fields='id, webViewLink').execute()
         folder_id = folder.get('id')
         folder_link = folder.get('webViewLink')
 
-        # スプレッドシートを作成し、フォルダに移動
+        # スプレッドシートを作成し、Google Driveのフォルダに移動
         sh = gc.create(sheet_name_with_ts)
         drive_service.files().update(fileId=sh.id, addParents=folder_id, removeParents='root').execute()
         sh.share(None, perm_type='anyone', role='reader')
@@ -247,7 +257,7 @@ def on_export_to_gsheet_clicked(b):
         worksheet1.clear()
         set_with_dataframe(worksheet1, df_to_export)
         
-        # グラフ画像をPNGとしてメモリに保存し、Driveのフォルダにアップロード
+        # グラフ画像をPNGとしてメモリに保存し、Google Driveのフォルダにアップロード
         buf = io.BytesIO()
         fig_for_export.savefig(buf, format='png', bbox_inches='tight')
         plt.close(fig_for_export)
@@ -257,15 +267,6 @@ def on_export_to_gsheet_clicked(b):
         media = MediaIoBaseUpload(buf, mimetype='image/png')
         file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
         drive_service.permissions().create(fileId=file.get('id'), body={'type': 'anyone', 'role': 'reader'}).execute()
-        
-        # Sheet2にグラフ画像を=IMAGE()関数で挿入
-        try:
-            worksheet2 = sh.worksheet("グラフ")
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet2 = sh.add_worksheet(title="グラフ", rows="50", cols="20")
-        worksheet2.clear()
-        image_url = file.get('webContentLink')
-        worksheet2.update('A1', [[f'=IMAGE("{image_url}")']])
         
         status_display.value = f"<p style='color:green;'>✅ <a href='{folder_link}' target='_blank'>フォルダ「{folder_name}」への出力が完了しました。</a></p>"
 
@@ -304,5 +305,3 @@ on_update_button_clicked(None)
 try:
     from google.colab import output
     output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
-except ImportError:
-    pass # Colab以外の環境では何もしない
