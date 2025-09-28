@@ -29,6 +29,7 @@ from gspread_dataframe import set_with_dataframe
 from google.colab import auth
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from google.colab import output
 
 # ==============================================================================
 # 2. 定数と初期値の定義
@@ -302,6 +303,4 @@ app_layout = widgets.HBox([control_panel, chart_panel])
 # ==============================================================================
 display(app_layout)
 on_update_button_clicked(None)
-try:
-    from google.colab import output
-    output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
+output.eval_js("new Promise(resolve => setTimeout(() => {document.querySelector('#output-area').scrollIntoView({ behavior: 'smooth', block: 'start' }); resolve();}, 200))")
