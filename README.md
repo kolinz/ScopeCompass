@@ -39,6 +39,7 @@
 
 そこで、CSP、SIer、End Userのそれぞれの責任範囲を可視化し、関係者が理解しやすくすることが求められます。
 
+## 「ScopeCompass」ができること
 「ScopeCompass」は、CSP、SIer、End Userのそれぞれの責任範囲と責任の割合をもとに、責任共有モデルを可視化します。
 
 ## ScopeCompassにおけるクラウドの責任共有モデルの図を作成プログラム
