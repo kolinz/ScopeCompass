@@ -16,7 +16,7 @@
 下記の表で言えば、メールやファイル共有は、Public SaaS に該当します。たとえば、データが失われた場合、クラウド提供事業者（CSP）に瑕疵（かし）がなければ、バックアップを定期的に取らなかったユーザー（企業や個人）の自己責任となることが一般的です。そのため、メールやファイル共有のクラウドサービスでは、利用規約や契約書に、バックアップを取ることについて説明があるはずです。
 
 ### 責任共有モデル
-| レイヤー            | On-Premise | Private Cloud | Public IaaS | Public PaaS | Public SaaS |
+| レイヤー　　　　　　| On-Premise | Private Cloud | Public IaaS | Public PaaS | Public SaaS |
 |--------------------|------------|---------------|-------------|-------------|-------------|
 | データ & アクセス   | □   |□      | □    | □    | □    |□
 | アプリケーション    | □   |□          | □        | □        | ■          |
@@ -47,3 +47,9 @@ Google Colab向けcsrmv_tool_ipywidgets4gcolab.pyについて
 
 [![](https://img.youtube.com/vi/ANDdb6Znicg/0.jpg)](https://www.youtube.com/watch?v=ANDdb6Znicg)
 
+## 実装済み機能
+- [x] グラフ描画と、右クリックによる画像保存
+- [x] 「調整パネル」にて、サービスモデル x レイヤー(責任対象）の役割（CSP , SIer , End User）別の割合の変更
+- [x] CSVダウンロード機能
+- [x] Google ドライブ連携機能 - Google ドライブ内にフォルダを作り、役割（CSP , SIer , End User）別の割合をGoogleスプレッドシートと、責任分担のグラフを画像ファイルとして保存する機能
+- [ ] Google Colab以外の環境で動かすための別バージョン作成（Amazon SageMaker Studio Lab向けは確認済み）
