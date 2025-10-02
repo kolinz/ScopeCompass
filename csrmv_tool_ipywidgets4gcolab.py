@@ -293,7 +293,7 @@ control_panel = widgets.VBox([
     input_tabs
 ])
 chart_panel = widgets.VBox([
-    widgets.HTML("<h3>責任分担図</h3>"),
+    widgets.HTML("<h3>責任共有モデル</h3>"),
     chart_output,
 ])
 app_layout = widgets.HBox([control_panel, chart_panel])
