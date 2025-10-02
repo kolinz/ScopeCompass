@@ -188,7 +188,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css="footer {display: none !important}") 
 
         # --- 右側の描画エリア ---
         with gr.Column(scale=2):
-            gr.Markdown("### 責任分担図")
+            gr.Markdown("### 責任共有モデル")
             chart_output = gr.Plot()
             csv_download_button = gr.File(label="CSVファイルをダウンロード", file_count="single")
 
