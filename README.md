@@ -49,6 +49,12 @@ Google Colab向けcsrmv_tool_ipywidgets4gcolab.pyについて
 
 [![](https://img.youtube.com/vi/ANDdb6Znicg/0.jpg)](https://www.youtube.com/watch?v=ANDdb6Znicg)
 
+## 実装方法
+### Google Colab環境の場合
+[Google colabでScopeCompassを使い、責任共有モデルを作成する（Google Drive連携）](https://qiita.com/kolinz/items/d0ae4519c84bc8007a28)
+### Google Colab環境以外の場合
+[watsonx.ai Studioを使って、ScopeCompassを使い、責任共有モデルを作成する](https://qiita.com/kolinz/items/c5c3a6d7520aed901fa2)
+
 ## 実装済み機能
 - [x] グラフ描画と、右クリックによる画像保存
 - [x] 「調整パネル」にて、サービスモデル x レイヤー(責任対象）の役割（CSP , SIer , End User）別の割合の変更
